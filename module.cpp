@@ -27,12 +27,12 @@ inline void twoDimWrite(std::vector<float> &tensor, int &x, int &y, const int &s
 // Step #2: Implement Read/Write Accessors for a 4D Tensor
 inline float fourDimRead(std::vector<float> &tensor, int &x, int &y, int &z, int &b, 
         const int &sizeX, const int &sizeY, const int &sizeZ) {
-    return 0.0;
+    return tensor[x * (sizeX * sizeY * sizeZ) + y * (sizeY * sizeZ) + z * (sizeZ) + b];
 }
 
 inline void fourDimWrite(std::vector<float> &tensor, int &x, int &y, int &z, int &b, 
         const int &sizeX, const int &sizeY, const int &sizeZ, float &val) {
-    return; 
+    tensor[x * (sizeX * sizeY * sizeZ) + y * (sizeY * sizeZ) + z * (sizeZ) + b] = val;
 }
 
 // DO NOT EDIT THIS FUNCTION //
@@ -123,7 +123,62 @@ torch::Tensor myNaiveAttention(torch::Tensor QTensor, torch::Tensor KTensor, tor
     */
     
     // -------- YOUR CODE HERE  -------- //
-    
+
+    for (int b = 0; b < B; b++) {
+
+        for (int h = 0; h < H; h++) {
+
+            // step1: calculate QK_t
+            for (int i = 0; i < N; i++) {
+
+                for (int j = 0; j < N; j++) {
+                    
+                    // QK_t(N * N) = Q(i, q) * K_t(q, j)
+                    // K_t(q, j) = K(j, q)
+                    float QK_ij = .0;
+                    for (int q = 0; q < d; q++) {
+                        QK_ij += fourDimRead(Q, b, h, i, q, H, N, d)
+                            * fourDimRead(K, b, h, j, q, H, N, d);
+                    }
+                    
+                    twoDimWrite(QK_t, i, j, N, QK_ij);
+                }
+            }
+
+            // step2: Softmax in around
+            for (int i = 0; i < N; i++) {
+                float sum = .0;
+
+                // sum = exp(a[i]) (i = 0, 1, 2, ...)
+                for (int j = 0; j < N; j++) {
+                    float tmp = twoDimRead(QK_t, i, j, N);
+                    tmp = exp(tmp);
+                    twoDimWrite(QK_t, i, j, N, tmp);
+                    sum += tmp;
+                }
+
+                for (int j = 0; j < N; j++) {
+                    float sm = twoDimRead(QK_t, i, j, N);
+                    sm /= sum;
+                    twoDimWrite(QK_t, i, j, N, sm);
+                }
+            }
+            
+            // step3: multiply V and get O
+            for (int i = 0; i < N; i++) {
+                for (int j = 0; j < d; j++) {
+                    float O_ij = .0;
+
+                    for (int k = 0; k < N; k++) {
+                        O_ij += twoDimRead(QK_t, i, k, N)
+                            * fourDimRead(V, b, h, k, j, H, N, d);
+                    }
+                    fourDimWrite(O, b, h, i, j, H, N, d, O_ij);
+                }
+            }
+        }
+    }
+
     // DO NOT EDIT THIS RETURN STATEMENT //
     // It formats your C++ Vector O back into a Tensor of Shape (B, H, N, d) and returns it //
     return torch::from_blob(O.data(), {B, H, N, d}, torch::TensorOptions().dtype(torch::kFloat32)).clone();
