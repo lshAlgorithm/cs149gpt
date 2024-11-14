@@ -530,6 +530,29 @@ torch::Tensor myFusedAttention(torch::Tensor QTensor, torch::Tensor KTensor, tor
 //                PART 4: FLASH ATTENTION 		      //
 // ---------------------------------------------------------- //
 
+
+/// @brief Implement flash attention in C++ where you can specify the `Bc` and `Br`.
+/// @param QTensor 
+/// @param KTensor 
+/// @param VTensor 
+/// @param QiTensor 
+/// @param KjTensor 
+/// @param VjTensor 
+/// @param SijTensor 
+/// @param PijTensor 
+/// @param PVTensor 
+/// @param OiTensor 
+/// @param LTensor 
+/// @param LiTensor 
+/// @param LijTensor 
+/// @param LnewTensor 
+/// @param Bc 
+/// @param Br 
+/// @param B 
+/// @param H 
+/// @param N 
+/// @param d 
+/// @return 
 torch::Tensor myFlashAttention(torch::Tensor QTensor, torch::Tensor KTensor, torch::Tensor VTensor,
                torch::Tensor QiTensor, torch::Tensor KjTensor, torch::Tensor VjTensor,
                torch::Tensor SijTensor, torch::Tensor PijTensor, torch::Tensor PVTensor,
@@ -565,6 +588,160 @@ torch::Tensor myFlashAttention(torch::Tensor QTensor, torch::Tensor KTensor, tor
     std::vector<float> lnew = formatTensor(LnewTensor);
 
     // -------- YOUR CODE HERE  -------- //
+
+    // The number of blocks among rows(Q)
+    int Tr = (N + Br - 1) / Br;
+    // The number of blocks among cols(K)
+
+    int Tc = (N + Bc - 1) / Bc;
+    for (int b = 0; b < B; b++) {
+        for (int h = 0; h < H; h++) {
+            
+            
+            // Initialize l with 0's
+            for(int ii = 0; ii < N; ii++){
+                l[ii] = 0.0;
+            }
+
+
+            for(int j = 0; j < Tc; j++){
+                // 1. Load Kj, Vj --CHECKED
+                // Kj, Vj are passed in with Shape: (Bc, d)
+
+                // start row index of Kj, Vj
+                int j_start = j * Bc; 
+                // size of the Kj & Vj
+                int j_size = Bc < N - j_start ? Bc : N - j_start;
+
+                for(int ii = 0; ii < j_size; ii++){
+                    for(int jj = 0; jj < d; jj++){
+                        float Kj_ii_jj = fourDimRead(K, b, h, ii + j_start, jj, H, N, d);
+                        twoDimWrite(Kj, ii, jj, d, Kj_ii_jj);
+
+                        float Vj_ii_jj = fourDimRead(V, b, h, ii + j_start, jj, H, N, d);
+                        twoDimWrite(Vj, ii, jj, d, Vj_ii_jj);
+                    }
+                }
+
+                for(int i = 0; i < Tr; i++){
+                    // 2. Load Qi, Oi, li --CHECKED
+                    // Qi:  (Br,d)  = (i_size,d)
+                    // Oi:  (Br,d)  = (i_size,d)
+                    // li:   Br
+
+                    int i_start = i * Br;
+                    int i_size = Br < N - i_start ? Br : N - i_start;
+
+                    for(int ii = 0; ii < i_size; ii++){
+                        // load li
+                        li[ii] = l[ii + i_start];
+                        for(int jj = 0; jj < d; jj++){
+                            // load Qi
+                            float Qi_ii_jj = fourDimRead(Q, b, h, ii + i_start, jj, H, N, d);
+                            twoDimWrite(Qi, ii, jj, d, Qi_ii_jj);
+
+                            // load Oi
+                            float Oi_ii_jj = fourDimRead(O, b, h, ii + i_start, jj, H, N, d);
+                            twoDimWrite(Oi, ii, jj, d, Oi_ii_jj);
+                        }
+                    }
+
+                    
+                    
+                    // 3. Compute Sij = Qi * Kj^T
+                    // Qi   : (Br,d)  = (i_size,d)
+                    // Kj   : (Bc,d)  = (j_size,d)
+                    // Sij  : (Br,Bc), passed in with Shape: (Br, Bc)
+                    // Sij[ii][jj] += Qi[ii][kk] * Kj[jj][kk](Kj^T[kk][jj])
+                    for(int ii = 0; ii < i_size; ii++){
+                        for(int jj = 0; jj < j_size; jj++){
+                            float Sij_ii_jj = 0;
+                            for(int kk = 0; kk < d; kk++){
+                                float Qi_ii_kk = twoDimRead(Qi, ii, kk, d);
+                                float Kj_jj_kk = twoDimRead(Kj, jj, kk, d);
+                                
+                                Sij_ii_jj += Qi_ii_kk * Kj_jj_kk;
+                            }
+                            
+                            twoDimWrite(Sij, ii, jj, Bc, Sij_ii_jj);
+
+                            // 4. Compute Pij = exp(Sij)
+                            float Pij_ii_jj = exp(Sij_ii_jj);
+                            twoDimWrite(Pij, ii, jj, Bc, Pij_ii_jj);
+                        }
+                    }
+
+                    // 5. Compute lij = rowsum(Pij)
+                    // Pij: (Br,Bc)
+                    // lij: Br
+                    for(int ii = 0; ii < i_size; ii++){
+                        float lij_ii = 0;
+                        for(int jj = 0; jj < j_size; jj++){
+                            float Pij_ii_jj = twoDimRead(Pij, ii, jj, Bc);
+                            lij_ii += Pij_ii_jj;
+                        }
+                        lij[ii] = lij_ii;
+                    }
+
+                    
+                    // 6. Compute lnew = li + lij
+                    // li, lij, and lnew are passed in with shape (Br)
+                    for(int ii = 0; ii < i_size; ii++){
+                        lnew[ii] = li[ii] + lij[ii];
+                    }
+
+                    
+                    
+
+                    // 7. Compute Oi = (li * Oi + Pij * Vj) / lnew. Note: li * Oi is elementwise multiply
+                    // Oi:  (Br,d)  = (i_size,d),       passed in with shape: (Br, d)
+                    // Pij: (Br,Bc) = (i_size,j_size),  passed in with shape: (Br, Bc)
+                    // Vj:  (Bc,d)  = (j_size,d),       passed in with shape: (Bc, d)
+                    // li:   Br     =  i_size,          passed in with shape  (Br)
+                    // lnew: Br     =  i_size,          passed in with shape  (Br)
+                    for(int ii = 0; ii < i_size; ii++){
+                        float li_ii = li[ii];
+                        for(int jj = 0; jj < d; jj++){
+                            // read Oi[ii][jj]
+                            float Oi_ii_jj = twoDimRead(Oi, ii, jj, d);
+
+                            // Oi[ii][jj] = li[ii] * Oi[ii][jj]
+                            Oi_ii_jj = li_ii * Oi_ii_jj;
+
+
+                            for(int kk = 0; kk < j_size; kk++){
+                                float Pij_ii_kk = twoDimRead(Pij, ii, kk, Bc);
+                                float Vj_kk_jj  = twoDimRead(Vj, kk, jj, d);
+                                Oi_ii_jj += Pij_ii_kk * Vj_kk_jj;
+
+                            }
+                            
+                            Oi_ii_jj = Oi_ii_jj / lnew[ii];
+                            twoDimWrite(Oi, ii, jj, d, Oi_ii_jj);
+                        }
+                        
+                    }
+
+                    
+
+                    
+                   
+
+                    // 8. Write Oi and lnew back to O and l
+                    // Oi:  (Br,d)  = (i_size,d),       passed in with shape: (Br, d)
+                    // lnew: Br     =  i_size,          passed in with shape  (Br)
+                    for(int ii = 0; ii < i_size; ii++){
+                        float lnew_ii = lnew[ii];
+                        l[i_start + ii] = lnew_ii;
+                        for(int jj = 0; jj < d; jj++){
+                            float Oi_ii_jj = twoDimRead(Oi, ii, jj, d);
+                            fourDimWrite(O, b, h, ii + i_start, jj, H, N, d, Oi_ii_jj);
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     // DO NOT EDIT THIS RETURN STATEMENT //
     // It formats your C++ Vector O back into a Tensor of Shape (B, H, N, d) and returns it //
