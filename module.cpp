@@ -476,6 +476,7 @@ torch::Tensor myFusedAttention(torch::Tensor QTensor, torch::Tensor KTensor, tor
 
 
     // -------- YOUR CODE HERE  -------- //
+    #pragma omp parallel for collapse(3)
     // We give you a template of the first three loops for your convenience
     //loop over batch
     for (int b = 0; b < B; b++){
@@ -484,10 +485,36 @@ torch::Tensor myFusedAttention(torch::Tensor QTensor, torch::Tensor KTensor, tor
         for (int h = 0; h < H; h++){
             for (int i = 0; i < N ; i++){
 
-		// YRow is moved inside so each OpenMP thread gets a local copy.
+		// ORowTensor is moved inside so each OpenMP thread gets a local copy.
                 at::Tensor ORowTensor = temp.index({torch::indexing::Slice(omp_get_thread_num(), torch::indexing::None)});      
                 std::vector<float> ORow = formatTensor(ORowTensor);
 		//YOUR CODE HERE
+                float sm_sum = .0;
+                for (int j = 0; j < N; j++) {
+
+                    float Row_j = .0;
+                    for (int q = 0; q < d; q++) {
+                        Row_j += fourDimRead(Q, b, h, i, q, H, N, d)
+                            * fourDimRead(K, b, h, j, q, H, N, d);
+                    }
+
+                    float Row_j_exp = exp(Row_j);
+                    ORow[j] = Row_j_exp;
+                    sm_sum += Row_j_exp;
+                }
+
+                for (int j = 0; j < N; j++) {
+                    ORow[j] /= sm_sum;
+                }
+
+                for (int j = 0; j < d; j++) {
+                    // Get O_ij to put it into ultimate matrix
+                    float O_ij = .0;
+                    for (int k = 0; k < N; k++) {
+                        O_ij += ORow[k] * fourDimRead(V, b, h, k, j, H, N, d);
+                    }
+                    fourDimWrite(O, b, h, i, j, H, N, d, O_ij);
+                }
             }
 	}
     }
