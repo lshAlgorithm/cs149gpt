@@ -657,10 +657,8 @@ torch::Tensor myFlashAttention(torch::Tensor QTensor, torch::Tensor KTensor, tor
                         for(int jj = 0; jj < j_size; jj++){
                             float Sij_ii_jj = 0;
                             for(int kk = 0; kk < d; kk++){
-                                float Qi_ii_kk = twoDimRead(Qi, ii, kk, d);
-                                float Kj_jj_kk = twoDimRead(Kj, jj, kk, d);
                                 
-                                Sij_ii_jj += Qi_ii_kk * Kj_jj_kk;
+                                Sij_ii_jj += twoDimRead(Qi, ii, kk, d) * twoDimRead(Kj, jj, kk, d);
                             }
                             
                             twoDimWrite(Sij, ii, jj, Bc, Sij_ii_jj);
@@ -677,8 +675,7 @@ torch::Tensor myFlashAttention(torch::Tensor QTensor, torch::Tensor KTensor, tor
                     for(int ii = 0; ii < i_size; ii++){
                         float lij_ii = 0;
                         for(int jj = 0; jj < j_size; jj++){
-                            float Pij_ii_jj = twoDimRead(Pij, ii, jj, Bc);
-                            lij_ii += Pij_ii_jj;
+                            lij_ii += twoDimRead(Pij, ii, jj, Bc);
                         }
                         lij[ii] = lij_ii;
                     }
@@ -710,9 +707,8 @@ torch::Tensor myFlashAttention(torch::Tensor QTensor, torch::Tensor KTensor, tor
 
 
                             for(int kk = 0; kk < j_size; kk++){
-                                float Pij_ii_kk = twoDimRead(Pij, ii, kk, Bc);
-                                float Vj_kk_jj  = twoDimRead(Vj, kk, jj, d);
-                                Oi_ii_jj += Pij_ii_kk * Vj_kk_jj;
+                                
+                                Oi_ii_jj += twoDimRead(Pij, ii, kk, Bc) * twoDimRead(Vj, kk, jj, d);
 
                             }
                             
