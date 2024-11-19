@@ -25,8 +25,7 @@ export void NavieAttention_ispc(uniform float O[],
                                 uniform int N, 
                                 uniform int d) 
 {
-    for (uniform int b = 0; b < B; b++) {
-        for (uniform int h = 0; h < H; h++) {
+    foreach (b = 0...B, h = 0...H) {
 
             // step1: calculate QK_t
             for (uniform int i = 0; i < N; i++) {
@@ -76,6 +75,6 @@ export void NavieAttention_ispc(uniform float O[],
                     fourDimWrite(O, b, h, i, j, H, N, d, O_ij);
                 }
             }
-        }
+        
     }
 }

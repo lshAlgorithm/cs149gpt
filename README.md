@@ -1,6 +1,6 @@
 > [!Tips]
 >
-> This is a branch for `ispc`
+> This is a branch for `ispc` implementation.
 
 # Assignment 4: NanoGPT149
 
