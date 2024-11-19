@@ -3,8 +3,8 @@
 export void ispc_sinx (
   uniform int N,
   uniform int terms,
-  uniform float* x,
-  uniform float* result) {
+  uniform float x[],
+  uniform float result[]) {
   // Assume N % programCount = 0;
   // Block assingment
   uniform int count = N / programCount;

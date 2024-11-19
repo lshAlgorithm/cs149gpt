@@ -3,8 +3,8 @@
 export void ispc_sinx (
   uniform int N,            // N = 1024 as input value
   uniform int terms,
-  uniform float* X,
-  uniform float* result) {
+  uniform float X[],
+  uniform float result[]) {
   // assume N % programCount = 0
   // Interleave assignment
   // "Gang" of ISPC program instances, Gang contains programCount = 8 instances
