@@ -89,6 +89,7 @@ torch::Tensor myNaiveAttention(torch::Tensor QTensor, torch::Tensor KTensor, tor
     //Format QK_t Tensor into a 2D vector.
     std::vector<float> QK_t = formatTensor(QK_tTensor);
     
+    #if(0)
     /* Here is an example of how to read/write 0's to  Q (B, H, N, d) using the 4D accessors
 
         //loop over Batch Size
@@ -121,9 +122,41 @@ torch::Tensor myNaiveAttention(torch::Tensor QTensor, torch::Tensor KTensor, tor
              }
          }
     */
-    
+    #endif
+
     // -------- YOUR CODE HERE  -------- //
 
+    #ifdef ISPC
+
+    float* O_aligned = (float*)aligned_alloc(64, O.size() * sizeof(float));
+    float* Q_aligned = (float*)aligned_alloc(64, Q.size() * sizeof(float));
+    float* K_aligned = (float*)aligned_alloc(64, K.size() * sizeof(float));
+    float* V_aligned = (float*)aligned_alloc(64, V.size() * sizeof(float));
+    float* QK_t_aligned = (float*)aligned_alloc(64, QK_t.size() * sizeof(float));
+
+    memcpy(O_aligned, O.data(), O.size() * sizeof(float));
+    memcpy(Q_aligned, Q.data(), Q.size() * sizeof(float));
+    memcpy(K_aligned, K.data(), K.size() * sizeof(float));
+    memcpy(V_aligned, V.data(), V.size() * sizeof(float));
+    memcpy(QK_t_aligned, QK_t.data(), QK_t.size() * sizeof(float));
+
+
+    NavieAttention_ispc(O, Q, K, V, QK_t, B, H, N, d);
+
+
+    memcpy(O.data(), O_aligned, O.size() * sizeof(float));
+    memcpy(Q.data(), Q_aligned, Q.size() * sizeof(float));
+    memcpy(K.data(), K_aligned, K.size() * sizeof(float));
+    memcpy(V.data(), V_aligned, V.size() * sizeof(float));
+    memcpy(QK_t.data(), QK_t_aligned, QK_t.size() * sizeof(float));
+
+    aligned_free(O_aligned);
+    aligned_free(Q_aligned);
+    aligned_free(K_aligned);
+    aligned_free(V_aligned);
+    aligned_free(QK_t_aligned);
+
+    #else
     for (int b = 0; b < B; b++) {
 
         for (int h = 0; h < H; h++) {
@@ -178,6 +211,8 @@ torch::Tensor myNaiveAttention(torch::Tensor QTensor, torch::Tensor KTensor, tor
             }
         }
     }
+
+    #endif
 
     // DO NOT EDIT THIS RETURN STATEMENT //
     // It formats your C++ Vector O back into a Tensor of Shape (B, H, N, d) and returns it //
