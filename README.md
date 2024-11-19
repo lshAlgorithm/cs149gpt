@@ -1,3 +1,7 @@
+> [!Tips]
+>
+> This is a branch for `ispc`
+
 # Assignment 4: NanoGPT149
 
 **Due Monday Dec 4, 11:59pm PST**

@@ -7,8 +7,9 @@
 #include <immintrin.h>
 
 // Uncomment for ISPC
-//#include "module_ispc.h"
-//using namespace ispc;
+#include "module_ispc.h"
+using namespace ispc;
+#define ISPC
 
 // ------------------------------------ //
 // 	WARM-UP: ACCESSING TENSORS      //
@@ -141,7 +142,7 @@ torch::Tensor myNaiveAttention(torch::Tensor QTensor, torch::Tensor KTensor, tor
     memcpy(QK_t_aligned, QK_t.data(), QK_t.size() * sizeof(float));
 
 
-    NavieAttention_ispc(O, Q, K, V, QK_t, B, H, N, d);
+    NavieAttention_ispc(O_aligned, Q_aligned, K_aligned, V_aligned, QK_t_aligned, B, H, N, d);
 
 
     memcpy(O.data(), O_aligned, O.size() * sizeof(float));
@@ -150,11 +151,11 @@ torch::Tensor myNaiveAttention(torch::Tensor QTensor, torch::Tensor KTensor, tor
     memcpy(V.data(), V_aligned, V.size() * sizeof(float));
     memcpy(QK_t.data(), QK_t_aligned, QK_t.size() * sizeof(float));
 
-    aligned_free(O_aligned);
-    aligned_free(Q_aligned);
-    aligned_free(K_aligned);
-    aligned_free(V_aligned);
-    aligned_free(QK_t_aligned);
+    free(O_aligned);
+    free(Q_aligned);
+    free(K_aligned);
+    free(V_aligned);
+    free(QK_t_aligned);
 
     #else
     for (int b = 0; b < B; b++) {

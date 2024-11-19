@@ -25,14 +25,13 @@ export void NavieAttention_ispc(uniform float O[],
                                 uniform int N, 
                                 uniform int d) 
 {
-    foreach (b = 0...B, h = 0...H, j = 0...N) {
-
-        for (int h = 0; h < H; h++) {
+    for (uniform int b = 0; b < B; b++) {
+        for (uniform int h = 0; h < H; h++) {
 
             // step1: calculate QK_t
-            for (int i = 0; i < N; i++) {
+            for (uniform int i = 0; i < N; i++) {
 
-                for (int j = 0; j < N; j++) {
+                for (uniform int j = 0; j < N; j++) {
                     
                     // QK_t(N * N) = Q(i, q) * K_t(q, j)
                     // K_t(q, j) = K(j, q)
@@ -47,18 +46,18 @@ export void NavieAttention_ispc(uniform float O[],
             }
 
             // step2: Softmax in around
-            for (int i = 0; i < N; i++) {
+            for (uniform int i = 0; i < N; i++) {
                 float sum = .0;
 
                 // sum = exp(a[i]) (i = 0, 1, 2, ...)
-                for (int j = 0; j < N; j++) {
+                for (uniform int j = 0; j < N; j++) {
                     float tmp = twoDimRead(QK_t, i, j, N);
                     tmp = exp(tmp);
                     twoDimWrite(QK_t, i, j, N, tmp);
                     sum += tmp;
                 }
 
-                for (int j = 0; j < N; j++) {
+                for (uniform int j = 0; j < N; j++) {
                     float sm = twoDimRead(QK_t, i, j, N);
                     sm /= sum;
                     twoDimWrite(QK_t, i, j, N, sm);
@@ -66,8 +65,8 @@ export void NavieAttention_ispc(uniform float O[],
             }
             
             // step3: multiply V and get O
-            for (int i = 0; i < N; i++) {
-                for (int j = 0; j < d; j++) {
+            for (uniform int i = 0; i < N; i++) {
+                for (uniform int j = 0; j < d; j++) {
                     float O_ij = .0;
 
                     for (int k = 0; k < N; k++) {
